@@ -1,0 +1,271 @@
+<?xml version="1.0" encoding="US-ASCII"?>
+<!DOCTYPE rfc SYSTEM "rfc2629.dtd">
+<?rfc toc="yes"?>
+<?rfc tocompact="yes"?>
+<?rfc tocdepth="3"?>
+<?rfc tocindent="yes"?>
+<?rfc symrefs="yes"?>
+<?rfc sortrefs="yes"?>
+<?rfc comments="yes"?>
+<?rfc inline="yes"?>
+<?rfc compact="yes"?>
+<?rfc subcompact="no"?>
+<rfc category="std" docName="draft-msri-grow-bmp-compression-00"
+     ipr="trust200902">
+  <front>
+    <title abbrev="BMP compression">BMP Compression</title>
+
+    <author fullname="Mukul Srivastava" initials="M." surname="Srivastava">
+      <organization>Juniper Networks</organization>
+
+      <address>
+        <postal>
+          <street>10 Technology Park Drive</street>
+
+          <city>Westford MA</city>
+
+          <code>01886</code>
+
+          <country>USA</country>
+        </postal>
+
+        <email>msri@juniper.net</email>
+      </address>
+    </author>
+
+    <author fullname="Paolo Lucente" initials="P." surname="Lucente">
+      <organization>NTT</organization>
+
+      <address>
+        <postal>
+          <street>Siriusdreef 70-72</street>
+
+          <city>Hoofddorp</city>
+
+          <region>WT</region>
+
+          <code>2132</code>
+
+          <country>Netherlands</country>
+        </postal>
+
+        <phone/>
+
+        <facsimile/>
+
+        <email>paolo@ntt.net</email>
+
+        <uri/>
+      </address>
+    </author>
+
+    <date day="15" month="October" year="2019"/>
+
+    <abstract>
+      <t>This document provides specification for an optional compressed BMP
+      Feed from a router to BMP station. </t>
+    </abstract>
+
+    <note title="Requirements Language">
+    <t>The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL
+    NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED",
+    "MAY", and "OPTIONAL" in this document are to be interpreted as
+    described in BCP 14 <xref target="RFC2119">RFC 2119</xref>
+    <xref target="RFC8174">RFC 8174</xref> when, and only when, they
+    appear in all capitals, as shown here.</t>
+    </note>
+  </front>
+
+  <middle>
+    <section title="Introduction">
+      <t>The BGP Monitoring Protocol (BMP) allows monitoring of 
+      Rib-in <xref target="RFC7854">RFC7854</xref>, 
+      Loc-Rib,<xref target="I-D.ietf-grow-bmp-local-rib">BGP local-rib</xref> and
+      Rib-in and Rib-Out monitoring allows pre-policy and post-policy view of the prefix.
+      Thus, for a scaled setup, with all these kinds of monitoring enabled,
+      BMP will get a lot of back pressure in the protocol as it needs to dump a huge data 
+      for its monitored peers, through a single socket towards BMP station.
+      BGP update PDU which is part of the BMP Route-monitoring (RM) message is also increasing.
+      It is no more limited to 4K as noted in draft-ietf-idr-bgp-extended-messages-21. 
+      Essentially, BMP is heading towards becoming I/O bound monitoring protocol.
+      This document proposes compression of BMP feed towards BMP station. Compression will ease the
+      pressure on TCP socket between a router and BMP station. 
+      Such a scheme would be useful if a route can spare some extra CPU for BMP operation. </t>
+
+      <t>As it must be obvious, this scheme will require compressor mechanism at the BMP speaking
+         router and a decompressor on the BMP station. The compression mechanism used at the BMP 
+        speaking is an implementation specific detail and is beyond the scope of this specification. </t>
+    </section>
+
+    <section title="Procedures">
+
+      <section title="Starting Compressor Capability">
+
+        <t>BMP compression feature on the router and BMP decompressor feature on the BMP station
+           has to be present at the same time. Enabling compression feature at router end only will lead to 
+           incomprehensible data at the BMP station end. Also same technique should be used to compress and
+           decompress the data on wire. Using different technique to compress and decompress would lead to 
+           incomprehensible data at the BMP station end.</t>
+
+        <t>BMP compression feature on the router and BMP decompressor feature on the BMP station can be 
+           enabled via configuraton. Once this feature is enabled between router and BMP station, the 
+           monitored router should indicate this to the BMP Station using new Compression Information TLV 
+           as described in following section. </t>
+
+        <t>From that point onwards, the router would send the compressed BMP feed towards BMP station. 
+           BMP session needs to be bounced every-time this feature is enabled on a current active BMP session.</t>
+
+      </section>
+
+
+      <section title="Compression Information TLV" anchor="tlv">
+
+        <t>As noted in <xref target="RFC7854">RFC7854</xref>, the initiation message provides a 
+           means for the monitored router to inform the monitoring station of its vendor specific
+           details. It can carry Information TLVs containing information about the monitored router. </t>
+  
+        <t>The monitored router MUST communicate the compression capability to BMP staton using
+           Compression Information TLV described below.</t>
+
+      <t><figure>
+          <artwork align="center"><![CDATA[ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-------------------------------+-------------------------------+
+| Information Type (2 octets)   |     Length (2 octets)         |
++-------------------------------+-------------------------------+
+| CM | CMINFO |                Reserved                         |                
++---------------------------------------------------------------+
+
+
+                  Figure 1: Compression Information TLV]]></artwork>
+        </figure><list style="symbols">
+          <t>Type = TDB1 (2 Octets): Compression Information TLV type.</t>
+
+          <t>Length (2 Octets): indicates the length of the value field of the
+          Compression Information TLV. The value field further consists of the 
+          Compression string.</t> 
+
+
+          <t>CM (4 bits): CM indicating DEFLATE compressed format value
+             as specified in RFC1950.</t>
+
+         <t> CINFO (4 bits): INFO as specified in RFC1950. 
+            Invalid values MUST lead to the
+            capability being ignored. The compressing peer MUST use this value 
+            for the parametrization of its algorithm.</t>
+
+        </list></t>
+
+
+      </section>
+
+
+      <section title="Compressed BMP Messages" anchor="message">
+
+        <t> Following rules should be following for achieving BMP feed compression:</t>
+        <t>
+          <list style="numbers"> 
+
+	    <t> A new message type, Compressed Route Monitoring (CRM), MUST be used. This is
+		to ensure backward compatibility with BMP stations that do not support the
+		compression capability. The message type is same in structure as described
+		by <xref target="I-D.ietf-grow-bmp-tlv">TLV support for BMP Route
+		Monitoring and Peer Down Messages</xref>. Compression is to be applied only
+		to this message type, all other BMP message types shall not be compressed.</t>
+  
+            <t> Compression is applicable to all the payload following the Common Header,
+		described in <xref target="RFC7854">Section 4.1 of</xref>. This allows to
+		read the total BMP message length, i.e. to perform sanity checks against
+		socket and compressor information.</t>
+
+            <t> Each compressed BMP message MUST be sent as a block, i.e. the decompression
+		MUST be able to yield decompressed results of the without waiting for further
+		compressed updates. This is different from the normally used stream compression
+		mode.</t>
+
+            <t> The compressed message MAY exceed the maximum message size but in such 
+		case compressor overflow per <xref format="default" pageno="false"
+		target="overflow"/> MUST be invoked.</t>
+
+          </list>
+        </t>
+      </section>
+
+
+      <section title="Compressor Overflow" anchor="overflow">
+            <t> This should be handled in same was as described in
+		<xref target="I-D.przygienda-idr-compressed-updates">draft-przygienda-idr-compressed-updates</xref>. 
+	    </t>
+      </section>
+
+
+      <section title="Error Handling" anchor="error">
+          <t> If the decompression on the BMP station fails for any reason, 
+              it needs to bring down the BMP session. </t>
+
+          <t> If the compression on the monitoring router fails for any reason, 
+              it is at the discretion of the router to handle it. It may try it few more times.
+              In the worse case it MAY bring down the BMP session</t>
+      </section>
+
+      <section title="Processing of Compressed Route Monitoring messages" anchor="decompression">
+            <t> A BMP station receiving a compressed message SHOULD process it
+		as follows:</t>
+
+	    <t>
+		<list style="numbers"> 
+		<t>Decode the BMP Common Header where message length is specified</t>
+		<t>Decompress remainder of the Compressed Route Monitoring message and
+		   determine the decompressed message size from the decompressor</t>
+		<t>Decode the BMP Per-peer header</t>
+		<t>Decode the BGP UPDATE PDU header to infer the presence of trailing TLVs</t>
+		<t>Decode the BMP message TLVs</t>
+		<t>Decode the actual BGP UPDATE PDU</t>
+		</list>
+	    </t>
+      </section>
+
+    </section>
+    
+    <section title="Acknowledgements">
+      <t>TBD.</t>
+    </section>
+
+    <section anchor="IANA" title="IANA Considerations">
+      <t> This document requests that IANA assign the following new parameters
+      to the BMP parameters name space.</t>
+
+      <section title="BMP Compression Information TLV">
+        <t>This document defines the BMP Compression Information TLV Header with Type = TBD
+        (<xref target="tlv"/>).</t>
+      </section>
+
+      <section title="BMP Compression Route Monitoring message type">
+        <t>This document also defines the BMP Compressed Route Monitoring message type with
+	Type = TBD (<xref target="message"/>).</t>
+      </section>
+
+    </section>
+
+    <section anchor="Security" title="Security Considerations">
+      <t> It is not believed that this document adds any additional security
+      considerations.</t>
+    </section>
+  </middle>
+
+  <back>
+    <references title="Normative References">
+      <?rfc include="reference.RFC.2119"?>
+
+      <?rfc include="reference.RFC.8174"?>
+
+      <?rfc include='reference.RFC.7854'?>
+
+      <?rfc include='reference.I-D.ietf-grow-bmp-local-rib'?>
+
+      <?rfc include='reference.I-D.ietf-grow-bmp-tlv'?>
+
+      <?rfc include='reference.I-D.przygienda-idr-compressed-updates'?>
+
+    </references>
+  </back>
+</rfc>
